@@ -9,7 +9,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 크롤링 시작 URL (필요 시 환경변수로 교체)
 BASE_URL: str = os.getenv(
     "NCS_BASE_URL",
-    "https://cafe.naver.com/f-e/cafes/29434212/menus/77?page=1&size=15&viewType=L&headId=183",
+    "https://cafe.naver.com/f-e/cafes/29434212/menus/77?page=1&size=50&viewType=L&headId=183",
 )
 
 # 가져올 페이지 수

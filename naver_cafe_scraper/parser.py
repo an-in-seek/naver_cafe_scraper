@@ -11,7 +11,7 @@ from .utils import clean_for_kobert
 # Config (일원화)
 # -----------------------------------------------------------------------------
 # 고정값(필요시 여기서만 바꾸면 됨)
-_OCR_ENABLED_DEFAULT = True  # 상세 파싱 시 OCR 수행 기본 on
+_OCR_ENABLED_DEFAULT = False  # 상세 파싱 시 OCR 수행 기본 on
 _OCR_LANG = "kor+eng"  # 언어
 _OCR_PSM = 6  # page segmentation mode
 _OCR_OEM = 1  # engine mode
@@ -330,12 +330,12 @@ def extract_article_detail(
     """
     게시글 상세 페이지에서 주요 정보 추출
     - title, author, date, read_count, like_count
-    - content_text(본문+alt/캡션+OCR), content_html
+    - content_text(본문+alt/캡션+OCR → KoBERT 전처리), content_html
     - external_links, images
 
     ocr:
-      None -> 환경변수(NCS_OCR) 있으면 따르고, 없으면 기본 True
-      True/False -> 강제 지정
+      None  -> 환경변수(NCS_OCR) 존재 시 해당 값, 없으면 기본 True
+      True/False -> 명시 값 우선
     """
     data: Dict[str, object] = {
         "title": "",
@@ -349,29 +349,34 @@ def extract_article_detail(
         "images": [],
     }
 
+    # 메타 필드
     _extract_basic_fields(target, data)
 
+    # 본문 루트/본문·HTML
     content_root = _find_content_root(target)
     body_text, content_html = _extract_body_text_and_html(content_root)
+
+    # 링크/이미지/이미지 주변 텍스트
     links, images = _extract_external_links_and_images(content_root)
     side_texts = _extract_image_side_texts(content_root)
 
-    # OCR 여부 결정(인자 > 환경변수 > 기본값 True)
+    # OCR 수행 여부 결정(인자 > 환경변수 > 기본값)
     if ocr is None:
         ocr_enabled = _OCR_ENABLED_ENV if os.getenv("NCS_OCR") else _OCR_ENABLED_DEFAULT
     else:
         ocr_enabled = bool(ocr)
 
-    ocr_texts: List[str] = _ocr_on_images(content_root) if ocr_enabled else []
+    ocr_texts: List[str] = _ocr_on_images(content_root) if (ocr_enabled and content_root) else []
 
-    # content_text: 본문 + (alt/캡션) + (OCR)
-    merged_parts = [body_text] + side_texts + ocr_texts
-    merged_text = "\n".join([t for t in merged_parts if t]).strip()
+    # 본문+부가텍스트 병합
+    merged_text = "\n".join(t for t in ([body_text] + side_texts + ocr_texts) if t).strip()
 
-    # KoBERT 전처리 적용
-    cleaned_text = clean_for_kobert(merged_text if merged_text else body_text)
+    # KoBERT 전처리 적용 (비어있으면 원문 유지)
+    source_text = merged_text or body_text
+    cleaned_text = clean_for_kobert(source_text) or source_text
 
-    data["content_text"] = cleaned_text if cleaned_text else (merged_text or body_text)
+    # 결과 구성
+    data["content_text"] = cleaned_text
     data["content_html"] = content_html
     data["external_links"] = links
     data["images"] = images
