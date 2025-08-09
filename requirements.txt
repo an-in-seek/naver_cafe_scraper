@@ -1,2 +1,5 @@
 playwright>=1.43.0
 pandas>=2.0.0
+pillow>=10.0.0
+pytesseract>=0.3.10
+requests

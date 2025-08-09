@@ -1,133 +1,186 @@
 # Naver Cafe Scraper
 
-네이버 카페 게시판의 글 제목과 URL을 크롤링하여 CSV로 저장하는 파이썬 프로젝트입니다.  
-Playwright를 사용하여 로그인 세션 유지 및 페이지 탐색을 수행합니다.
+네이버 카페 게시글을 **Playwright** 기반으로 크롤링하고,  
+이미지 내 텍스트까지 **Tesseract OCR**을 이용해 추출하는 파이썬 프로젝트입니다.  
+특히 한글(`kor`), 영어(`eng`) 혼합 문서와 캡처 이미지의 텍스트를 정확히 인식하도록  
+**PIL 기반 전처리**(UnsharpMask + Threshold)로 최적화되어 있습니다.
 
 ---
 
-## 📂 프로젝트 구조
+## 주요 기능
 
-```
-
-naver\_cafe\_scraper/
-├── data/ # 상태/출력 데이터 저장
-│ └── output/ # 크롤링 결과 저장 폴더
-│ └── naver\_state.json # 로그인 세션 상태
-│
-├── naver\_cafe\_scraper/ # 패키지 코드
-│ ├── config.py # 설정값 관리
-│ ├── crawler.py # 크롤링 로직
-│ ├── exporter.py # CSV/JSON 저장 로직
-│ ├── login.py # 로그인 처리
-│ ├── parser.py # HTML 파싱
-│ ├── utils.py # 유틸 함수
-│ └── **init**.py
-│
-├── scripts/ # 실행 스크립트
-│ ├── run\_crawl.py # 크롤링 실행
-│ └── run\_export.py # 결과 저장 실행
-│
-├── tests/ # 테스트 코드
-│ ├── test\_crawler.py
-│ ├── test\_crawler\_flow\.py
-│ ├── test\_exporter.py
-│ ├── test\_login.py
-│ ├── test\_parser.py
-│ ├── test\_utils.py
-│ └── conftest.py
-│
-├── pyproject.toml # Black, Flake8 설정
-├── requirements.txt # 필수 패키지
-├── requirements-dev.txt # 개발/테스트 패키지
-└── README.md
-
-````
+- **목록 크롤링**: 카페 게시판 글 목록(`title`, `url`, `author`, `date`, `read_count`, `like_count`) 추출
+- **상세 크롤링**: 본문 HTML, 텍스트, 외부 링크, 이미지 URL 수집
+- **OCR 기능**: 본문 이미지(`img` 태그) 내 텍스트를 자동 인식해 `content_text`에 병합
+- **PIL-only 전처리**: Grayscale → UnsharpMask → Threshold(160) → DPI=300 → OCR
+- **언어 지원**: 한글+영어(`kor+eng`) 고정
+- **출력 포맷**: CSV, JSON 저장
 
 ---
 
-## 📦 설치 방법
+## 설치
 
 ```bash
-# 저장소 클론
-git clone https://github.com/your-username/naver_cafe_scraper.git
+git clone https://github.com/yourname/naver_cafe_scraper.git
 cd naver_cafe_scraper
-
-# 가상환경 생성 및 활성화
 python -m venv .venv
-source .venv/bin/activate  # (Windows) .venv\Scripts\activate
-
-# 필수 패키지 설치
+source .venv/bin/activate  # (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
-
-# 개발/테스트 환경 패키지 설치
-pip install -r requirements-dev.txt
 ````
 
----
+`requirements.txt` 예시:
 
-## 🚀 사용 방법
-
-### 1. 크롤링 실행
-
-```bash
-# 기본 실행
-python -m scripts.run_crawl --pages 1 --output data/output/naver_cafe_titles.csv
-```
-
-* `--pages`: 크롤링할 페이지 수
-* `--output`: 저장할 CSV 파일 경로
-
-### 2. 저장/후처리 실행
-
-```bash
-python -m scripts.run_export --input data/output/naver_cafe_titles.csv --format json
-```
-
-* `--input`: 입력 파일 경로
-* `--format`: 저장 형식 (`csv`, `json`)
-
----
-
-## 🧪 테스트
-
-```bash
-# 전체 테스트 실행
-pytest -q
-
-# 커버리지 측정
-pytest -q --cov=naver_cafe_scraper
-
-# 특정 테스트 실행
-pytest tests/test_crawler.py
+```txt
+playwright>=1.43.0
+pandas>=2.0.0
+pytesseract
+Pillow
 ```
 
 ---
 
-## 🎯 코드 스타일 검사
+## Tesseract 설치
+
+1. [Tesseract 공식 릴리즈 페이지](https://github.com/UB-Mannheim/tesseract/wiki)에서 OS에 맞는 설치 파일 다운로드
+2. 설치 시 `kor.traineddata`, `kor_vert.traineddata`가 포함되도록 언어 데이터 선택
+3. 설치 경로 예시:
+
+    * Windows: `C:\Program Files\Tesseract-OCR\tesseract.exe`
+    * Mac: `/usr/local/bin/tesseract`
+
+---
+
+## 환경 변수 설정
+
+```powershell
+setx NCS_TESSERACT_CMD "C:\Program Files\Tesseract-OCR\tesseract.exe"
+setx NCS_OCR true
+```
+
+* `NCS_TESSERACT_CMD`: Tesseract 실행 파일 경로
+* `NCS_OCR`: `true` / `false` 로 OCR 실행 여부 제어 (기본값: true)
+
+---
+
+## 크롤링 실행 예시
 
 ```bash
-# Flake8 문법 검사
-flake8 naver_cafe_scraper
+python -m scripts.run_crawl \
+  --pages 1 \
+  --detail \
+  --output data/output/naver_cafe_titles.csv \
+  --json data/output/naver_cafe_titles.json \
+  --progress
+```
 
-# Black 코드 포맷 검사
-black --check .
-# Black 자동 포맷
-black .
+* `--pages`: 수집할 목록 페이지 수
+* `--detail`: 상세 페이지까지 수집
+* `--output`: CSV 저장 경로
+* `--json`: JSON 저장 경로
+
+---
+
+## OCR 테스트 스크립트
+
+`tests/test_ocr_plus.py`를 이용해 이미지에 대한 다양한 전처리·인식 조합을 자동으로 테스트할 수 있습니다.
+
+```bash
+python tests/test_ocr_plus.py \
+  --url "이미지_URL" \
+  --langs "kor+eng" \
+  --psms "6,7,11,3" \
+  --oems "1,3" \
+  --scales "1.0,1.5,2.0,3.0" \
+  --filters "none,sharpen,contrast,unsharp" \
+  --thresholds "none,auto,160,190" \
+  --dpis "300,420" \
+  --topn 5 \
+  --tess "C:\Program Files\Tesseract-OCR\tesseract.exe" \
+  --save \
+  --outdir "data/ocr_debug" \
+  --verbose
+````
+
+### 주요 인자
+
+| 인자             | 설명                      | 기본값                             |
+|----------------|-------------------------|---------------------------------|
+| `--url`        | 테스트할 이미지 URL            | (필수)                            |
+| `--langs`      | OCR 언어 조합(콤마 구분)        | `kor+eng`                       |
+| `--psms`       | Page Segmentation Modes | `6,7,11,3`                      |
+| `--oems`       | OCR Engine Modes        | `1,3`                           |
+| `--scales`     | 배율                      | `1.0,1.5,2.0,3.0`               |
+| `--filters`    | 전처리 필터                  | `none,sharpen,contrast,unsharp` |
+| `--thresholds` | 이진화 방식                  | `none,auto,160,190`             |
+| `--dpis`       | DPI 값                   | `300,420`                       |
+| `--topn`       | 상위 N개 조합 출력             | `5`                             |
+| `--tess`       | Tesseract 실행 파일 경로      | 환경변수 `NCS_TESSERACT_CMD`        |
+| `--save`       | 전처리 이미지 저장              | 없음                              |
+| `--verbose`    | 전처리·인식 과정 로그            | 없음                              |
+
+### 실행 결과 예시
+
+```
+[src] size=(1280,720), mode=RGB
+[plan] total combos: 288
+[001] score=214 lang=kor+eng psm=6 oem=1 sc=1.5 flt=unsharp thr=160 dpi=300
+...
+
+================ TOP OCR VARIANTS ================
+#153 score=410 lang=kor+eng psm=6 oem=1 sc=3.0 flt=unsharp thr=160 dpi=300
+---------------------------------------------------
+미국 아마존 판매 1위!! 과학/수학 생활동화! 국내 첫 런칭...
+
+...
+
+================ BEST FULL TEXT ==================
+Best: lang=kor+eng psm=6 oem=1 sc=3.0 flt=unsharp thr=160 dpi=300
+--------------------------------------------------
+미국 아마존 판매 1위!! 과학/수학 생활동화 세트입니다...
+==================================================
 ```
 
 ---
 
-## 📌 주요 기술 스택
+## 출력 예시(JSON)
 
-* **Python 3.11**
-* **Playwright**: 웹 자동화 및 크롤링
-* **Pandas**: 데이터 저장/가공
-* **Pytest**: 테스트
-* **Black / Flake8**: 코드 스타일 관리
+```json
+{
+  "article_no": "13708359",
+  "title": "11번가) 미국 아마존 판매1위 과학/수학 생활동화 69,000원",
+  "url": "https://cafe.naver.com/f-e/cafes/29434212/articles/13708359",
+  "author": "똘돌잉",
+  "date": "2025.08.08. 23:17",
+  "read_count": 586,
+  "like_count": 9,
+  "content_text": "미국 아마존 판매 1위 과학/수학 생활동화 세트예요...\n(이미지 OCR 텍스트 포함)",
+  "external_links": [
+    "https://www.11st.co.kr/products/8546577618"
+  ],
+  "images": [
+    "https://cafeptthumb-phinf.pstatic.net/...jpg"
+  ]
+}
+```
 
 ---
 
-## ⚠️ 주의사항
+## 라벨링 데이터 생성 예시
 
-* 네이버 카페 크롤링 시 이용 약관과 로봇 배제 표준을 반드시 준수하세요.
-* 로그인 정보와 세션 파일(`naver_state.json`)은 외부에 노출되지 않도록 주의하세요.
+(title + content\_text) 조합 후 CSV 저장:
+
+```csv
+Sentence,Label
+무료 쿠폰 받으세요! 지금 클릭하세요.,광고
+지금 가입하면 50% 할인!,광고
+이 링크를 통해 이벤트에 참여하세요.,광고
+...
+```
+
+---
+
+## 주의 사항
+
+* 네이버 카페는 로그인/권한 제한이 있으므로 **Playwright 로그인 세션**이 필요할 수 있습니다.
+* OCR 품질은 원본 이미지 해상도와 전처리 효과에 따라 달라집니다.
+* 상업적 사용 전 네이버 약관 및 저작권을 반드시 확인하세요.

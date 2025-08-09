@@ -1,69 +1,83 @@
-#!/usr/bin/env python
+# scripts/run_crawl.py
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from typing import Optional
 
-# 프로젝트 루트 경로를 sys.path에 추가
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
-
-from naver_cafe_scraper import config as cfg
 from naver_cafe_scraper import CafeCrawler, save_csv, save_json
+from naver_cafe_scraper import config as cfg
+from naver_cafe_scraper.utils import ensure_dir
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="네이버 카페 게시글 크롤러 실행")
-    parser.add_argument(
-        "--pages",
-        type=int,
-        default=cfg.MAX_PAGES,
-        help=f"수집할 페이지 수 (default: {cfg.MAX_PAGES})",
-    )
-    parser.add_argument(
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+    p.add_argument("--pages", type=int, default=cfg.MAX_PAGES, help="수집할 페이지 수")
+    p.add_argument(
         "--output",
         type=str,
-        default=cfg.DEFAULT_OUTPUT_CSV,
-        help=f"CSV 저장 경로 (default: {cfg.DEFAULT_OUTPUT_CSV})",
+        default=os.path.join(cfg.BASE_DIR, "data", "output", "naver_cafe_titles.csv"),
+        help="CSV 저장 경로",
     )
-    parser.add_argument(
-        "--json", type=str, default=None, help="JSON 저장 경로 (지정 시 JSON도 저장)"
+    p.add_argument(
+        "--json",
+        type=str,
+        default=None,
+        help="JSON 저장 경로(선택). 지정 시 CSV와 함께 저장",
     )
-    parser.add_argument(
+    p.add_argument(
         "--base-url",
         type=str,
-        default=cfg.BASE_URL,
-        help=f"크롤링 시작 URL (default: {cfg.BASE_URL})",
+        default=None,
+        help="게시판 목록 시작 URL (미지정 시 config.BASE_URL 사용)",
     )
-    return parser.parse_args()
+    p.add_argument(
+        "--detail",
+        action="store_true",
+        help="상세 페이지(본문/이미지/외부링크 등)까지 함께 수집",
+    )
+    p.add_argument(
+        "--progress",
+        action="store_true",
+        help="콘솔에 진행상황(진척도) 표시",
+    )
+    return p.parse_args(argv)
 
 
 def main() -> int:
     args = parse_args()
 
+    # base_url 기본값을 config에서 채움
+    base_url = args.base_url or cfg.BASE_URL
+
     crawler = CafeCrawler(
-        base_url=args.base_url,
+        base_url=base_url,
         headless=cfg.HEADLESS,
         state_path=cfg.STATE_PATH,
         wait_ms=cfg.WAIT_MS,
     )
 
-    rows = crawler.collect(max_pages=args.pages, base_url=args.base_url)
-    if not rows:
-        print("[run_crawl] 수집된 데이터가 없습니다.")
-        return 1
+    rows = crawler.collect(
+        max_pages=args.pages,
+        base_url=base_url,
+        fetch_detail=args.detail,
+        per_detail_delay_sec=0.5,
+        show_progress=args.progress,  # ← 진척도 표시
+    )
 
-    # CSV 저장
-    csv_path = save_csv(rows, path=args.output)
-    print(f"[run_crawl] CSV 저장 완료: {csv_path}")
+    # 저장
+    if args.output:
+        ensure_dir(os.path.dirname(args.output))
+        save_csv(rows, args.output)
+        print(f"[save] CSV: {args.output}")
 
-    # JSON 저장 (선택)
     if args.json:
-        json_path = save_json(rows, path=args.json)
-        print(f"[run_crawl] JSON 저장 완료: {json_path}")
+        ensure_dir(os.path.dirname(args.json))
+        save_json(rows, args.json)
+        print(f"[save] JSON: {args.json}")
 
+    print(f"[done] 총 {len(rows)}건")
     return 0
 
 

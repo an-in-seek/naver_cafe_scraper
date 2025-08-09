@@ -9,7 +9,7 @@ from naver_cafe_scraper.utils import (
 
 
 def test_build_page_url_replace():
-    out = build_page_url("https://x?menu=1&page=3&size=15", 7)
+    out = build_page_url("https://x?menu=1&page=3&size=50", 7)
     assert "page=7" in out
 
 

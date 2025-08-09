@@ -19,7 +19,7 @@ def prompt_login_and_persist(
     page: Page,
     context: BrowserContext,
     state_path: str,
-    wait_sec: int = 5,
+    wait_sec: int = 1,
 ) -> None:
     """
     네이버 로그인 페이지가 열려있으면 사용자가 직접 로그인할 수 있게 대기 후 세션 저장.
